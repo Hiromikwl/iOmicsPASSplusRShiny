@@ -1,0 +1,18 @@
+# R package build artifacts
+src/*.o
+src/*.so
+src/*.dll
+src/*.a
+*.Rcheck/
+*.tar.gz
+
+# macOS
+.DS_Store
+iOmicsPASS/.DS_Store
+
+# RStudio
+.Rproj.user/
+*.Rproj
+
+# Pre-built binary (kept locally, not in repo)
+bin/

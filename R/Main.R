@@ -958,7 +958,8 @@ createInputParam <- function(data.X, data.Y=NULL, data.Z=NULL,within.net=NULL, b
                              phenotype =NULL, pathway = NULL,standardize.data = T, log.transform = F, normalizeBy =NULL,
                              min.obs = 5, min.prop = 0.8, knn.impute = F,knn.k = 10, max.block.impute = 1000,
                              Cross.Validate = TRUE, num.Kfold = 5, min.thres = NULL, Enrichment=TRUE, tag= NULL,
-                             usePrior = FALSE, priorfile = NULL,bg.prop = 0.2,min.bg.size = 3, min.sig.size = 1){
+                             usePrior = FALSE, priorfile = NULL,bg.prop = 0.2,min.bg.size = 3, min.sig.size = 1,
+                             return.list = FALSE){
 
   str.datX = "dataX.txt"
   str.datY = "dataY.txt"
@@ -1081,6 +1082,42 @@ createInputParam <- function(data.X, data.Y=NULL, data.Z=NULL,within.net=NULL, b
   if(!is.null(tag)) fnew = paste0(fnew,"_",tag)
   write.table(input_file_dataframe, file=paste0("iOmicsPASS/", fnew), sep=" = ", quote=F, col.names = F,row.names=F)
 
+  ## Optionally return a named list suitable for passing directly to iOmicsPASS_core()
+  if(return.list){
+    out = list(
+      dataX        = if(is.data.frame(data.X)||is.matrix(data.X)) data.X else NULL,
+      dataY        = if(!is.null(data.Y)&&(is.data.frame(data.Y)||is.matrix(data.Y))) data.Y else NULL,
+      dataZ        = if(!is.null(data.Z)&&(is.data.frame(data.Z)||is.matrix(data.Z))) data.Z else NULL,
+      phenotype    = if(is.data.frame(phenotype)||is.matrix(phenotype)) phenotype else NULL,
+      withinNet    = if(!is.null(within.net)&&(is.data.frame(within.net)||is.matrix(within.net))) within.net else NULL,
+      btwNet       = if(!is.null(btw.net)&&(is.data.frame(btw.net)||is.matrix(btw.net))) btw.net else NULL,
+      pathway      = if(!is.null(pathway)&&(is.data.frame(pathway)||is.matrix(pathway))) pathway else NULL,
+      prior        = if(!is.null(priorfile)&&(is.data.frame(priorfile)||is.matrix(priorfile))) priorfile else NULL,
+      log_X        = bool.logtrans[1]=="true",
+      log_Y        = bool.logtrans[2]=="true",
+      log_Z        = bool.logtrans[3]=="true",
+      ztrans_X     = bool.stand[1]=="true",
+      ztrans_Y     = bool.stand[2]=="true",
+      ztrans_Z     = bool.stand[3]=="true",
+      analyzeY     = bool.analyzeY=="true",
+      analyzeZ     = bool.analyzeZ=="true",
+      knnimpute    = bool.impute=="true",
+      knnK         = knn.k,
+      blocksize    = max.block.impute,
+      crossV       = bool.CV=="true",
+      numFold      = num.Kfold,
+      minthres     = ifelse(is.null(min.thres), 1e6, min.thres),
+      enrichment   = bool.enrich=="true",
+      bgProp       = bg.prop,
+      minbgSize    = min.bg.size,
+      minsigSize   = min.sig.size,
+      minobs       = min.obs,
+      minprop      = min.prop,
+      usePrior     = bool.prior=="true",
+      normalizeZby = ifelse(is.null(normalizeBy),"Y",normalizeBy)
+    )
+    return(invisible(out))
+  }
 }
 
 #' Carry out Predictive Analysis of Subnetwork Signatures
@@ -1132,17 +1169,93 @@ createInputParam <- function(data.X, data.Y=NULL, data.Z=NULL,within.net=NULL, b
 #'
 #'
 #' @export
-iOmicsPASS.R <- function( ff= "input.param", outputDir ="iOmicsPASS/Output/", Cross.Validate=TRUE, plotCV=TRUE){
+iOmicsPASS.R <- function( ff= "input.param", outputDir ="iOmicsPASS/Output/", Cross.Validate=TRUE, plotCV=TRUE,
+                          use.rcpp = TRUE){
 
   ret = NULL
-  cmdStr = paste0("bin/iOmicsPASS iOmicsPASS/",ff)
-  cmdStr =paste(cmdStr ,outputDir)
-  system(cmdStr)
 
-  if(plotCV) Plot_CrossValidation(outputDir)
+  if(!use.rcpp){
+    ## Legacy: call pre-compiled binary via system() ##
+    cmdStr = paste0("bin/iOmicsPASS iOmicsPASS/",ff)
+    cmdStr = paste(cmdStr, outputDir)
+    system(cmdStr)
+    if(plotCV) Plot_CrossValidation(outputDir)
+    if(!Cross.Validate) ret = read.delim(paste0(outputDir,"/PredictiveEdges_Parameters.txt"), as.is=T,header=T,check.names=F)
+    return(ret)
+  }
 
-  ## read in the required model parameters ##
-  if(!Cross.Validate) ret = read.delim(paste0(outputDir,"/PredictiveEdges_Parameters.txt"), as.is=T,header=T,check.names=F)
+  ## New: call iOmicsPASS_core() Rcpp function directly ##
+  # Read parameters from input file
+  params = read.delim(paste0("iOmicsPASS/", ff), header=FALSE, sep="=",
+                       stringsAsFactors=FALSE, strip.white=TRUE)
+  colnames(params) = c("name","value")
+  p = setNames(trimws(params$value), trimws(params$name))
+
+  get_p = function(key, default=NULL){
+    v = p[key]; if(is.na(v) || is.null(v)) return(default); trimws(v)
+  }
+  get_bool = function(key, default=FALSE){
+    v = get_p(key); if(is.null(v)) return(default); tolower(v) == "true"
+  }
+  get_num  = function(key, default=0)  { v = get_p(key, as.character(default)); as.numeric(v) }
+  get_int  = function(key, default=0L) { v = get_p(key, as.character(default)); as.integer(v) }
+
+  read_df_if = function(key){
+    f = get_p(key)
+    if(is.null(f) || !file.exists(f)) return(NULL)
+    read.delim(f, as.is=TRUE, check.names=FALSE)
+  }
+
+  dataX    = read_df_if("DATA_X")
+  dataY    = read_df_if("DATA_Y")
+  dataZ    = read_df_if("DATA_Z")
+  pheno    = read_df_if("SUBTYPE_FILE")
+  wnet     = read_df_if("NETWORK_WITHIN")
+  bnet     = read_df_if("NETWORK_BTW")
+  pway     = read_df_if("MODULE_FILE")
+  priorF   = read_df_if("PRIOR_FILE")
+
+  # The network direction columns come in as character — coerce to integer
+  if(!is.null(wnet) && ncol(wnet)>=3) wnet[[3]] = as.integer(wnet[[3]])
+  if(!is.null(bnet) && ncol(bnet)>=3) bnet[[3]] = as.integer(bnet[[3]])
+
+  ret = iOmicsPASS_core(
+    dataX        = dataX,
+    dataY        = dataY,
+    dataZ        = dataZ,
+    phenotype    = pheno,
+    withinNet    = wnet,
+    btwNet       = bnet,
+    pathway      = pway,
+    prior        = priorF,
+    log_X        = get_bool("LOG_TRANSFORM_X"),
+    log_Y        = get_bool("LOG_TRANSFORM_Y"),
+    log_Z        = get_bool("LOG_TRANSFORM_Z"),
+    ztrans_X     = get_bool("ZTRANS_X", TRUE),
+    ztrans_Y     = get_bool("ZTRANS_Y", TRUE),
+    ztrans_Z     = get_bool("ZTRANS_Z", TRUE),
+    analyzeY     = get_bool("ANALYZE_Y"),
+    analyzeZ     = get_bool("ANALYZE_Z"),
+    knnimpute    = get_bool("KNN_IMPUTE"),
+    knnK         = get_int("KNN_K", 10L),
+    blocksize    = get_int("MAX_BLOCKSIZE", 1500L),
+    crossV       = get_bool("CROSS_VALIDATION", TRUE),
+    numFold      = get_int("CV_FOLD", 10L),
+    minthres     = get_num("MIN_THRES", 1e6),
+    enrichment   = get_bool("ENRICHMENT", TRUE),
+    bgProp       = get_num("BACKGROUND_PROP", 0.5),
+    minbgSize    = get_int("MINBG_SIZE", 1L),
+    minsigSize   = get_int("MINSIG_SIZE", 3L),
+    minobs       = get_int("MIN_OBS", 1L),
+    minprop      = get_num("MIN_PROP", 0.5),
+    usePrior     = get_bool("USE_PRIOR"),
+    normalizeZby = ifelse(is.null(get_p("NORMALIZE_ZBY")), "Y", get_p("NORMALIZE_ZBY"))
+  )
+
+  if(plotCV && !is.null(ret$CVerrors)) {
+    tryCatch(Plot_CrossValidation_from_df(ret$CVerrors), error=function(e) NULL)
+  }
+
   ret
 }
 
@@ -1314,6 +1427,47 @@ Plot_CrossValidation<-function(outputdir){
   abline(h=(minError+sd),lty=2,col="grey40")
   text(-0.15,(minError+sd)+0.02, pos =4, font =2,lab="1 SD above minimum threshold",cex=0.7,col="grey40")
   dev.off()
+}
+
+#' Plot Cross-validation performance from an in-memory data frame
+#' (used when iOmicsPASS_core() is called directly)
+#'
+#' @param CVdat Data frame as returned in result$CVerrors by iOmicsPASS_core().
+#' @param outputdir Optional directory to write CVplot_Penalty.pdf.
+#' @return Invisibly NULL; a PDF is written if outputdir is supplied.
+Plot_CrossValidation_from_df <- function(CVdat, outputdir = NULL) {
+  minError = min(CVdat$CVerror)
+  minThres = CVdat$Threshold[which(CVdat$CVerror==minError)][1]
+  genesurv = CVdat$NumEdgesSelected[which(CVdat$CVerror==minError)][1]
+
+  cid = grep("CVerror_", colnames(CVdat))
+  ll  = gsub("CVerror_","", colnames(CVdat)[cid])
+  cc  = 2:(length(cid)+1)
+  legend_lab = c("Overall", ll)
+
+  sd_cv = sd(CVdat$CVerror[-nrow(CVdat)])
+  within = CVdat$Threshold[which(abs(CVdat$CVerror) < (minError + sd_cv))]
+  xpt = max(within)
+  ypt = CVdat$CVerror[which(CVdat$Threshold==xpt)]
+  zpt = CVdat$MeanCV_NumEdgesSelected[which(CVdat$Threshold==xpt)]
+
+  outfile = if(!is.null(outputdir)) paste0(outputdir,"CVplot_Penalty.pdf") else "CVplot_Penalty.pdf"
+  pdf(outfile, height=5, width=7, useDingbats=FALSE)
+  par(mar=c(4,4,7,2), mai=c(1,1,1,0.5))
+  plot(CVdat$Threshold, CVdat$CVerror, ylim=c(0,1), type="l", col=1, lwd=2.5,
+       cex.axis=0.8, ylab="Mean misclassification error", xlab="Threshold")
+  mtext("Mean number of edges selected", side=3, line=3)
+  axis(side=3, at=CVdat$Threshold, lab=CVdat$MeanCV_NumEdgesSelected, las=2, srt=45, cex.axis=0.8)
+  for(i in seq_along(cid)) lines(CVdat$Threshold, CVdat[,cid[i]], col=cc[i], lty=1)
+  legend("topleft", legend_lab, col=c(1,cc), lty=1, lwd=4, cex=0.8)
+  points(minThres, CVdat$CVerror[match(minThres,CVdat$Threshold)], pch=4, lwd=2, col=2)
+  points(xpt, ypt, pch=4, lwd=2, col=2)
+  text(minThres, CVdat$CVerror[match(minThres,CVdat$Threshold)], pos=1, offset=1,
+       lab=paste0("Min Threshold=",round(minThres,3),"\nError=",round(minError,3),
+                  "\nEdges=",genesurv), cex=0.6)
+  abline(h=(minError+sd_cv), lty=2, col="grey40")
+  dev.off()
+  invisible(NULL)
 }
 
 #' Classification on external dataset
