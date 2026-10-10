@@ -17,6 +17,19 @@ iOmicsPASS/.DS_Store
 # Pre-built binary (kept locally, not in repo)
 bin/
 
+# Boost headers (provided by BH R package at build time)
+TMPLIB/
+
+# Pre-built binaries and archives (redundant in source repo)
+WindowsBinary/
+iOmicsPASSplus.zip
+iOmicsPASSplus_1.0.tar.gz
+*.tar.gz
+*.zip
+
+# Standalone C++ build artefact
+makefile
+
 # Claude Code session files
 .claude/
 
