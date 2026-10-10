@@ -32,7 +32,13 @@ Imports:
 	nnet,
 	pheatmap,
 	pracma,
-	RColorBrewer
+	RColorBrewer,
+	shiny,
+	bslib,
+	DT,
+	visNetwork,
+	igraph,
+	htmlwidgets
 RoxygenNote: 7.1.2
 Suggests: 
     knitr,

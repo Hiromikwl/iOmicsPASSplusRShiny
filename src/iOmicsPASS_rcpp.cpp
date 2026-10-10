@@ -341,25 +341,31 @@ Rcpp::List iOmicsPASS_core(
     if(analyzeY) ReverseMap(BTWMap, Targets2BTWmap);
 
     map<string, vector<set<string> > > FirstDNeighborMap;
-    set<string> features = createNeighborMap(tmpDir, &X_g, &target_g,
-                                              &BTWMap, &Targets2BTWmap,
-                                              &WithinMap, FirstDNeighborMap);
-
+    set<string> features;
+    map<string, PAM_t> PAMmap;
+    bool useZ = analyzeZ;
+    vector<double> thresMax;
+    double minThres = UserInput.minthres;
+    vector<double> MODthres;
+    vector<vector<set<string> > > geneSurv;
+    int _phase = 11;
+    try {
+    features = createNeighborMap(tmpDir, &X_g, &target_g,
+                                  &BTWMap, &Targets2BTWmap,
+                                  &WithinMap, FirstDNeighborMap);
+    _phase = 12;
     // -----------------------------------------------------------------------
     // 12. Fill PAM map (shrunken centroids)
     // -----------------------------------------------------------------------
     Rcpp::Rcout << "\nCarrying out shrunken centroid module..." << std::endl;
-    map<string, PAM_t> PAMmap;
-    bool useZ = analyzeZ;
-    vector<double> thresMax = fillPAMmap2(useZ, normalizeZby, &Alledges, &commonSub,
-                                           &InteractMap, &subtypeMap, &subjectMap,
-                                           PAMmap, &FirstDNeighborMap, tmpDir);
+    thresMax = fillPAMmap2(useZ, normalizeZby, &Alledges, &commonSub,
+                           &InteractMap, &subtypeMap, &subjectMap,
+                           PAMmap, &FirstDNeighborMap, tmpDir);
     Rcpp::Rcout << "Maximum Dij (average): " << calMean(thresMax) << std::endl;
-
+    _phase = 13;
     // -----------------------------------------------------------------------
     // 13. Cross-validation
     // -----------------------------------------------------------------------
-    double minThres = UserInput.minthres;
     if(crossV){
         Rcpp::Rcout << "\nCarrying out cross-validation...(This may take a while)\n" << std::endl;
         double cvThres = CVKfold(tmpDir, useZ, usePrior, normalizeZby, numFold,
@@ -369,20 +375,26 @@ Rcpp::List iOmicsPASS_core(
     } else {
         Rcpp::Rcout << "\nSkipping cross-validation. Using threshold: " << minThres << std::endl;
     }
-
+    _phase = 14;
     // Scale per-class thresholds
-    double Avgthres = calMean(thresMax);
-    vector<double> MODthres = thresMax;
-    for(int i = 0; i < (int)thresMax.size(); i++)
-        MODthres[i] = (minThres / Avgthres) * thresMax[i];
+    {
+        double Avgthres = calMean(thresMax);
+        MODthres = thresMax;
+        for(int i = 0; i < (int)thresMax.size(); i++)
+            MODthres[i] = (minThres / Avgthres) * thresMax[i];
+    }
 
     // -----------------------------------------------------------------------
     // 14. OutputGeneSurv — writes output files and returns edge survival sets
     // -----------------------------------------------------------------------
-    vector<vector<set<string> > > geneSurv =
+    geneSurv =
         outputGeneSurv(tmpDir, useZ, usePrior, normalizeZby, MODthres,
                        &Alledges, &commonSub, &subtypeMap, &PAMmap,
                        &subjectMap, &InteractMap);
+    _phase = 15;
+    } catch (std::out_of_range& _e) {
+        Rcpp::stop("std::out_of_range in phase " + std::to_string(_phase) + ": " + std::string(_e.what()));
+    }
 
     // -----------------------------------------------------------------------
     // 15. Network enrichment (optional)
@@ -438,15 +450,19 @@ Rcpp::List iOmicsPASS_core(
     result["ZtransZ"] = (analyzeZ && ztrans_Z) ? safe_read(tmpDir + "Ztransform_dataZ.txt") : (Rcpp::RObject)R_NilValue;
 
     // Enrichment results (one per group, up/down)
+    // Pre-allocate with integer indexing to avoid string-keyed assignment on empty Rcpp::List
     Rcpp::List enrichUp, enrichDown;
     if(enrichment && !pathway.isNull()){
-        for(int i = 0; i < (int)grplab.size(); i++){
+        int ng = (int)grplab.size();
+        enrichUp   = Rcpp::List(ng);
+        enrichDown = Rcpp::List(ng);
+        enrichUp.attr("names")   = Rcpp::wrap(grplab);
+        enrichDown.attr("names") = Rcpp::wrap(grplab);
+        for(int i = 0; i < ng; i++){
             string fUp   = tmpDir + grplab[i] + "_Enrichment_up.txt";
             string fDown = tmpDir + grplab[i] + "_Enrichment_down.txt";
-            if(std::ifstream(fUp))   enrichUp[grplab[i]]   = read_tsv_as_df(fUp);
-            else                     enrichUp[grplab[i]]   = R_NilValue;
-            if(std::ifstream(fDown)) enrichDown[grplab[i]] = read_tsv_as_df(fDown);
-            else                     enrichDown[grplab[i]] = R_NilValue;
+            enrichUp[i]   = std::ifstream(fUp.c_str()).good()   ? Rcpp::wrap(read_tsv_as_df(fUp))   : R_NilValue;
+            enrichDown[i] = std::ifstream(fDown.c_str()).good() ? Rcpp::wrap(read_tsv_as_df(fDown)) : R_NilValue;
         }
     }
     result["Enrichment_up"]   = enrichUp;

@@ -567,6 +567,18 @@ NetDeconvolute <- function(inputDat ,detectOutliers=TRUE, option, Calibration=TR
       }
       cat(paste0("Using ",criterion," as the model selection criterion, we pick lambda = ", round(optLambda,3), " as the optimal threshold in glasso.\n\n"))
 
+      # Save calibration scores for interactive UI display
+      calib_out <- data.frame(
+        lambda = lambda.vec,
+        AIC    = ModCriterion$AIC,
+        BIC    = ModCriterion$BIC,
+        eBIC   = ModCriterion$eBIC,
+        CV     = CVtest$CVvalue,
+        edges  = ModCriterion$edges,
+        stringsAsFactors = FALSE
+      )
+      write.csv(calib_out, "Output/CalibrationScores_glasso.csv", row.names = FALSE)
+
       return("End of Calibration. Please input a new lambda vector and re-calibration or re-run NetDeconvolute() after picking optimal lambda value and set Calibration to FALSE.\n")
     }
     cat("Skipping calibration step and using user-specified lambda value to estimate precision matrix.\n")
@@ -598,8 +610,13 @@ NetDeconvolute <- function(inputDat ,detectOutliers=TRUE, option, Calibration=TR
     write.table(PRECISION_out,"Output/glasso_estimated_icov.txt",sep="\t",row.names=F,quote=F)
     write.table(PartialCor_out,"Output/PartialCorrelation_icov.txt",sep="\t",row.names=F,quote=F)
 
-    ordrow = HM_COVmat$tree_row$order
-    ordcol = HM_COVmat$tree_col$order
+    if (Plot.Covariance && exists("HM_COVmat")) {
+      ordrow = HM_COVmat$tree_row$order
+      ordcol = HM_COVmat$tree_col$order
+    } else {
+      ordrow = seq_len(nrow(COVmat))
+      ordcol = seq_len(ncol(COVmat))
+    }
 
     AdjacencyMatN = AdjacencyMat[ordrow,ordcol]
     PRECISION_N=PRECISION[ordrow,ordcol]

@@ -4,6 +4,7 @@ useDynLib(iOmicsPASSplus, .registration = TRUE)
 importFrom(Rcpp, evalCpp)
 
 export(iOmicsPASS_core)
+export(run_iOmicsPASS)
 export(INSTALL.iOmicsPASS)
 export(NetDeconvolute)
 export(Plot_CrossValidation)

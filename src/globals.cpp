@@ -110,9 +110,10 @@ vector<string> stringSplit2(string str,string delimeter)
 
 
 string concatenate(vector<string> vec, char delim){
-    string ret=vec.at(0);
-    for(int j=1; j<vec.size(); j++){
-        ret += delim + vec.at(j);
+    if(vec.empty()) return "";
+    string ret=vec[0];
+    for(int j=1; j<(int)vec.size(); j++){
+        ret += delim + vec[j];
     }
     return ret;
 }
@@ -1366,14 +1367,13 @@ set<string> insertSubtypeMap(string subtypeFile, map<string, set<string> > &subt
 }
 
 double calMedian(vector<double> vec){
+    if(vec.empty()) return 0.0;
     double ret;
     sort(vec.begin(), vec.end());
-    if((vec.size()%2)==0){ret = (vec.at((vec.size()/2)-1)+vec.at(vec.size()/2))/2;}
-    else{
-        div_t res = div(vec.size(), 2);
-        ret = vec.at(res.quot);
-    }
-   return ret;
+    size_t n = vec.size();
+    if(n % 2 == 0){ ret = (vec.at(n/2 - 1) + vec.at(n/2)) / 2; }
+    else{ ret = vec.at(n/2); }
+    return ret;
 }
 
 double calMeanDik(vector<double> vec){
@@ -1632,6 +1632,8 @@ void outputData(vector<string> subjects,vector<string> genes,  map<string, subje
 
 
 vector<double> fillPAMmap2(bool useZ, string normby, set<string> *Alledges,vector<string> *sub,map<string,int> *InteractMap, map<string, set<string> > *subtypeMap, map<string, subjectClass> *subjectMap, map<string, PAM_t> &PAMmap, map<string, vector<set<string> > > *FDneighborMap, string dir){
+     if(Alledges->empty())
+         Rcpp::stop("No network edges matched data features. Check that node names in the within-network file match the feature names in data X.");
      map<string, subjectClass>::iterator s_iter;
      map<string, PAM_t>::iterator p_iter, p_iter2;
      map<string, set<string> >::iterator iter;
@@ -1693,12 +1695,16 @@ vector<double> fillPAMmap2(bool useZ, string normby, set<string> *Alledges,vecto
       	i_iter = InteractMap->find(curr_e);
       	interactINT = i_iter->second;
       	vec_g = stringSplit2(curr_e,"___");
+      	if(vec_g.size()<2) Rcpp::stop("fillPAMmap2: edge key has no '___' separator: '" + curr_e + "'");
         NodeA = vec_g.at(0);
 	    NodeB = vec_g.at(1);
-      	geneA = stringSplit2(NodeA,"...").at(0);
-      	typeA =  stringSplit2(NodeA,"...").at(1);
-      	geneB =  stringSplit2(NodeB,"...").at(0);
-      	typeB =  stringSplit2(NodeB,"...").at(1);
+      	{
+      	  vector<string> _va = stringSplit2(NodeA,"..."), _vb = stringSplit2(NodeB,"...");
+      	  if(_va.size()<2) Rcpp::stop("fillPAMmap2: NodeA has no '...' separator: '" + NodeA + "' (edge: '" + curr_e + "')");
+      	  if(_vb.size()<2) Rcpp::stop("fillPAMmap2: NodeB has no '...' separator: '" + NodeB + "' (edge: '" + curr_e + "')");
+      	  geneA = _va.at(0); typeA = _va.at(1);
+      	  geneB = _vb.at(0); typeB = _vb.at(1);
+      	}
       	p_iter->second.identifier = curr_e;
       	p_iter->second.geneA = NodeA;
       	p_iter->second.geneB = NodeB;
@@ -1977,12 +1983,16 @@ vector<double> fillPAMmap(bool useZ, string normby,set<string> *Alledges,vector<
       	interactINT = i_iter->second;
 
         vec_g = stringSplit2(curr_e,"___");
+        if(vec_g.size()<2) Rcpp::stop("fillPAMmap: edge key has no '___' separator: '" + curr_e + "'");
             NodeA = vec_g.at(0);
             NodeB = vec_g.at(1);
-    	    geneA = (stringSplit2(NodeA,"...")).at(0);
-    	    typeA = (stringSplit2(NodeA,"...")).at(1);
-    	    geneB = (stringSplit2(NodeB,"...")).at(0);
-    	    typeB = (stringSplit2(NodeB,"...")).at(1);
+        {
+          vector<string> _va = stringSplit2(NodeA,"..."), _vb = stringSplit2(NodeB,"...");
+          if(_va.size()<2) Rcpp::stop("fillPAMmap: NodeA has no '...' separator: '" + NodeA + "' (edge: '" + curr_e + "')");
+          if(_vb.size()<2) Rcpp::stop("fillPAMmap: NodeB has no '...' separator: '" + NodeB + "' (edge: '" + curr_e + "')");
+    	    geneA = _va.at(0); typeA = _va.at(1);
+    	    geneB = _vb.at(0); typeB = _vb.at(1);
+        }
         p_iter->second.identifier = curr_e;
         p_iter->second.geneA = NodeA;
         p_iter->second.geneB = NodeB;
@@ -2369,13 +2379,20 @@ set<string> createNeighborMap(string dir, vector<string> *X_g, vector<string> *Y
           Y_btw.clear();
           Neighbors.clear();
        }
-       iter = FDNeighborMap.find(maxNode);
-
-       num_Y = (iter->second).at(1).size();
-       num_X = (iter->second).at(2).size();
-
        Rcpp::Rcout<<"Generating output for information on the first-degree neighbours of all features in the data...\n"<<endl;
        Rcpp::Rcout<<"\nThere is a total of "<<FDNeighborMap.size()<<" features with between and/or within network interactions and "<<singletons.size()<<" features with no interactions and were removed."<<endl;
+
+       if(FDNeighborMap.empty()){
+           Rcpp::Rcout<<"Warning: no features have network interactions. Check that node names in the network file match feature names in the data.\n"<<endl;
+           ofstream outFile(dir+"Features_Neighbors.txt");
+           outFile<<"Feature\tGene\tType\tNeighbor_inData\tNumNeigh_inData"<<endl;
+           outFile.close();
+           return features;
+       }
+
+       iter = FDNeighborMap.find(maxNode);
+       num_Y = (iter->second).at(1).size();
+       num_X = (iter->second).at(2).size();
        Rcpp::Rcout<<maxNode<<" is the feature with the most first-degree neighbours, "<<num_Y<<" between- and "<< num_X<<" within-data interactions.\n"<<endl;
 
        //output the first degree neighbor data
@@ -2900,10 +2917,16 @@ vector<vector<set<string> > > outputGeneSurv(string dir,bool useZ, bool usePrior
 		interactINT = i_iter->second;
   		piter = PAMmap->find(curr_edge);
   		vector<string> strVec = stringSplit2(curr_edge,"___");
+  		if(strVec.size()<2) Rcpp::stop("outputGeneSurv: edge key has no '___' separator: '" + curr_edge + "'");
   		NodeA = strVec.at(0);
   		NodeB = strVec.at(1);
-                gnA = (stringSplit2(NodeA,"...")).at(0);
-                gnB = (stringSplit2(NodeB,"...")).at(0);
+  		{
+  		  vector<string> _va = stringSplit2(NodeA,"..."), _vb = stringSplit2(NodeB,"...");
+  		  if(_va.size()<2) Rcpp::stop("outputGeneSurv: NodeA has no '...' separator: '" + NodeA + "' (edge: '" + curr_edge + "')");
+  		  if(_vb.size()<2) Rcpp::stop("outputGeneSurv: NodeB has no '...' separator: '" + NodeB + "' (edge: '" + curr_edge + "')");
+  		  gnA = _va.at(0);
+  		  gnB = _vb.at(0);
+  		}
 
   		allNodes.insert(NodeA);
   		allNodes.insert(NodeB);
@@ -3599,7 +3622,17 @@ set<string> df_to_withinNet(Rcpp::DataFrame netDF,
     set<string> commonS = IntersectSet(allS, sub);
     vector<string> subjects = SetToVec(commonS);
 
-    int counter=0, ctr=0;
+    Rcpp::Rcout << "df_to_withinNet: " << n << " edges, " << X_g.size()
+                << " features in X_g, " << subjects.size() << " subjects.\n";
+    if(n > 0){
+        string tag0 = Rcpp::as<string>(colA[0]) + "...datX";
+        Rcpp::Rcout << "  First edge nodeA tag: '" << tag0
+                    << "' found=" << (containsVec(tag0,&X_g)?"YES":"NO") << "\n";
+        if(X_g.size() > 0)
+            Rcpp::Rcout << "  First X_g entry: '" << X_g[0] << "'\n";
+    }
+
+    int counter=0, ctr=0, matched=0;
     for(int i = 0; i < n; i++){
         string geneA = Rcpp::as<string>(colA[i]);
         string geneB = Rcpp::as<string>(colB[i]);
@@ -3611,12 +3644,9 @@ set<string> df_to_withinNet(Rcpp::DataFrame netDF,
             Rcpp::stop("Direction column in within-network must be 1 or -1.");
 
         if(containsVec(tagA,&X_g) && containsVec(tagB,&X_g)){
-            double rho = checkCor(tagA, tagB, subjects, subjectMap);
-            string Dir;
-            if(rho > 0) Dir="1"; else if(rho < 0) Dir="-1"; else { Dir="0"; ctr++; }
-            string typeStr = to_string(type);
-
-            if(Dir==typeStr){
+            matched++;
+            if(subjects.empty()){
+                // No subjects available → accept edge without direction check
                 auto m = WITHINMap.find(tagA);
                 if(m==WITHINMap.end()){ set<string> tmp; tmp.insert(tagB); WITHINMap[tagA]=tmp; }
                 else m->second.insert(tagB);
@@ -3626,11 +3656,30 @@ set<string> df_to_withinNet(Rcpp::DataFrame netDF,
                 string edge = tagA+"___"+tagB;
                 InteractMap[edge] = type;
                 ret.insert(edge);
-            } else counter++;
+            } else {
+                double rho = checkCor(tagA, tagB, subjects, subjectMap);
+                string Dir;
+                if(rho > 0) Dir="1"; else if(rho < 0) Dir="-1"; else { Dir="0"; ctr++; }
+                string typeStr = to_string(type);
+                if(Dir==typeStr){
+                    auto m = WITHINMap.find(tagA);
+                    if(m==WITHINMap.end()){ set<string> tmp; tmp.insert(tagB); WITHINMap[tagA]=tmp; }
+                    else m->second.insert(tagB);
+                    m = WITHINMap.find(tagB);
+                    if(m==WITHINMap.end()){ set<string> tmp; tmp.insert(tagA); WITHINMap[tagB]=tmp; }
+                    else m->second.insert(tagA);
+                    string edge = tagA+"___"+tagB;
+                    InteractMap[edge] = type;
+                    ret.insert(edge);
+                } else counter++;
+            }
         }
     }
-    if(ctr>0) Rcpp::Rcout << ctr << " zero correlations in within-network.\n";
-    Rcpp::Rcout << counter << " within-network edges removed (incoherent direction).\n";
+    Rcpp::Rcout << "df_to_withinNet: " << matched << "/" << n
+                << " edges had both features in X_g; " << ret.size()
+                << " added, " << counter << " removed (direction mismatch)";
+    if(ctr>0) Rcpp::Rcout << ", " << ctr << " zero correlations";
+    Rcpp::Rcout << ".\n";
     return ret;
 }
 

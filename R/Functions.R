@@ -167,6 +167,7 @@ glasso_Select<- function(S,sample.size, rholist=NULL,nlambda = 30 ,gamma=0.5,lam
     ret$eBIC = eBIC
     ret$AIC = AIC
     ret$BIC = BIC
+    ret$edges = GLP$df   # edges per lambda (non-zero off-diagonal / 2)
     return (ret)
 }
 

@@ -16,3 +16,16 @@ iOmicsPASS/.DS_Store
 
 # Pre-built binary (kept locally, not in repo)
 bin/
+
+# Claude Code session files
+.claude/
+
+# iOmicsPASS runtime working directory (input/output files, not source)
+iOmicsPASS/inputFiles/
+iOmicsPASS/input_param_cols
+iOmicsPASS/input_param_cv
+iOmicsPASS/input_param_cv2
+iOmicsPASS/input_param_final
+iOmicsPASS/input_param_test
+iOmicsPASS/input_param_thres
+iOmicsPASS/Output/
