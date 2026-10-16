@@ -1,52 +1,157 @@
 # iOmicsPASS+
 ## Integrative -Omics Predictive Analysis of Subnetwork Signatures (Version II - *An R-package*)
 
-### Installation
+### System Requirements
 
-Clone or download this repository:
-
-```bash
-git clone https://github.com/Hiromikwl/iOmicsPASSplusRShiny.git
-```
-
-Install the package from R using `devtools` (run once):
-
-```r
-# Install devtools if you don't have it
-install.packages("devtools")
-
-# Install iOmicsPASS+ from the cloned directory
-devtools::install_local("path/to/iOmicsPASSplusRShiny")
-```
-
-Replace `"path/to/iOmicsPASSplusRShiny"` with the actual path where you cloned the repository.
-
-**Dependencies** installed automatically: `Rcpp`, `BH`, `corpcor`, `gplots`, `grid`, `gridExtra`, `gridGraphics`, `huge`, `nnet`, `pheatmap`, `pracma`, `RColorBrewer`, `shiny`, `bslib`, `DT`, `visNetwork`, `igraph`, `htmlwidgets`.
+| Requirement | Details |
+|---|---|
+| R version | 4.1 or later (latest recommended) |
+| RStudio | Latest Desktop version (recommended IDE) |
+| C++ compiler | Rtools 4.x (Windows) · Xcode CLT (macOS) |
+| RAM | 4 GB minimum · 8 GB recommended for large datasets |
 
 ---
 
-### Launching the Shiny GUI
+### Installation
 
-After installation, launch the interactive GUI from the R console:
+#### Windows
+
+**Step 1 — Install R**  
+Download and run the Windows installer from CRAN: https://cran.r-project.org/bin/windows/base/
+
+**Step 2 — Install RStudio**  
+Download the latest RStudio Desktop: https://posit.co/download/rstudio-desktop/
+
+**Step 3 — Install Rtools (C++ compiler)**  
+iOmicsPASS+ contains compiled C++ code. Download Rtools from https://cran.r-project.org/bin/windows/Rtools/ and match the version to your R version (e.g. Rtools4.5 for R ≥ 4.5.0). Run the installer with default options.
+
+**Step 4 — Verify the compiler is detected**  
+In the RStudio Console:
+```r
+pkgbuild::has_build_tools(debug = TRUE)
+```
+The output should print `TRUE`. If you see `FALSE`, restart RStudio and try again.
+
+**Step 5 — Install iOmicsPASS+ from GitHub**  
+In the RStudio Console:
+```r
+install.packages("remotes")
+remotes::install_github("Hiromikwl/iOmicsPASSplusRShiny")
+```
+All R package dependencies install automatically. The first install takes a few minutes.
+
+---
+
+#### macOS
+
+**Step 1 — Install R**  
+Download the macOS `.pkg` installer from https://cran.r-project.org/bin/macosx/  
+- Apple Silicon (M1/M2/M3/M4): choose the **arm64** build  
+- Intel Macs: choose the **x86_64** build
+
+**Step 2 — Install RStudio**  
+Download the latest RStudio Desktop: https://posit.co/download/rstudio-desktop/
+
+**Step 3 — Install Xcode Command Line Tools (C++ compiler)**  
+Open Terminal and run:
+```bash
+xcode-select --install
+```
+A dialog box will appear — click Install. This takes approximately 5–10 minutes and requires an internet connection.
+
+**Step 4 — Verify the compiler is detected**  
+In the RStudio Console:
+```r
+pkgbuild::has_build_tools(debug = TRUE)
+```
+Should print `TRUE`. If `FALSE`, restart RStudio after the Xcode CLT installation completes.
+
+**Step 5 — Install iOmicsPASS+ from GitHub**  
+In the RStudio Console:
+```r
+install.packages("remotes")
+remotes::install_github("Hiromikwl/iOmicsPASSplusRShiny")
+```
+All R dependencies install automatically. First install takes a few minutes.
+
+---
+
+### Launching the Application
+
+Each time you want to use iOmicsPASS+, open RStudio and run:
 
 ```r
 library(iOmicsPASSplus)
 run_iOmicsPASS()
 ```
 
-This opens the iOmicsPASS+ web interface in your default browser. The GUI guides you through:
+> **Note:** The app opens in your default web browser. Keep the RStudio Console window open — closing it stops the app server. If the browser does not open automatically, copy the URL printed in the Console (e.g. `http://127.0.0.1:XXXX`) and paste it into your browser.
 
-1. **Data upload** — upload up to three omics data files and a network file
-2. **Network inference** *(optional)* — estimate a partial correlation network via `NetDeconvolute()`
-3. **Subnetwork signature analysis** — run iOmicsPASS+ to identify subnetwork signatures discriminating phenotypic groups
-4. **Interactive network visualisation** — explore, filter, and export the resulting network
-5. **Prediction** — classify new samples using the identified signatures
+---
 
-To start the server without opening a browser (e.g. on a remote/headless server):
+### Step-by-Step Workflow
 
-```r
-run_iOmicsPASS(launch.browser = FALSE)
-```
+**1. Try the example dataset**  
+The quickest way to explore all features is to use the bundled Tulip dataset (obese insulin-resistant vs lean insulin-sensitive):
+- On the **Home** tab, click **Load Example Data**
+- This loads proteomics + miRNA data, PPI and miRNA-target networks, and Human pathway annotations
+- Navigate to **Network Setup**, then **iOmicsPASS Analysis** to run the full workflow
+
+**2. Upload your own data**  
+Go to the **Data Upload** tab. Files must be plain text (`.txt` or `.csv`), tab- or comma-separated:
+- **Data X**: required — rows = features, columns = samples
+- **Data Y / Z**: optional second/third omics type
+- **Phenotype file**: sample IDs + group/class labels
+- **Pathway annotation**: upload your own, or click *Use example (Human pathways)*
+
+> Sample IDs in the phenotype file must exactly match the column headers in your data files.
+
+**3. Configure network files**  
+In the **Network Files** tab, upload edge list files with columns: `nodeA`, `nodeB`, `sign` (1 or −1):
+- *Within-network*: edges within Data X (e.g. protein–protein interactions)
+- *Between-network*: edges between Data X and Data Y (e.g. miRNA–gene targets)
+
+If no network is available, enable the glasso network inference option in the analysis settings.
+
+**4. Run the analysis**  
+- Go to **iOmicsPASS Analysis** and configure parameters (lambda range, CV folds, etc.)
+- Click **Run iOmicsPASS+**
+- Results appear in the **Results** tab once the analysis completes
+
+**5. Explore results**  
+- **Network**: interactive visualisation — colour edges by group direction, toggle curved/straight edges
+- **Network Enrichment**: bubble plot of pathway enrichment for the subnetwork
+- **Pathway Enrichment**: gene-level pathway enrichment with FDR cutoff
+- **Download All Results (ZIP)**: exports all tables, plots (PNG/JPEG), and enrichment results
+
+---
+
+### Input File Format Reference
+
+| File | Format requirements |
+|---|---|
+| Data X / Y / Z | Tab `.txt` or comma-separated `.csv`. Features in rows, samples in columns. Data values start from the second column. |
+| Phenotype | Tab `.txt` or comma-separated `.csv`. First column: sample IDs; second column: group labels. Additional columns for covariates (optional). |
+| Network (within/between) | 3 columns: Node A, Node B, sign (1 = positive, −1 = negative). One edge per row. |
+| Pathway annotation | 3 columns: Feature name, Pathway ID, Pathway annotation. |
+
+---
+
+### Troubleshooting
+
+**Compiler not found**
+- Run `pkgbuild::has_build_tools(debug = TRUE)` in RStudio
+- Windows: reinstall Rtools and restart RStudio
+- macOS: run `xcode-select --install` in Terminal
+
+**Package install fails**
+- Ensure you have R 4.1 or later
+- Try updating existing packages first: `update.packages(ask = FALSE)`
+- Check internet connectivity — GitHub must be reachable
+
+**App does not open in browser**
+- Check the RStudio Console for the URL (e.g. `http://127.0.0.1:XXXX`)
+- Copy and paste that URL directly into your browser
 
 ---
 
