@@ -1,10 +1,54 @@
 # iOmicsPASS+
 ## Integrative -Omics Predictive Analysis of Subnetwork Signatures (Version II - *An R-package*)
 
-To start, either download `iOmicsPASSplus.zip` file and unzip to local directory or use command line/Terminal to clone the entire github directory:
-```{bash eval=FALSE}
-> git clone https://github.com/cssblab/iOmicsPASSplus.git
+### Installation
+
+Clone or download this repository:
+
+```bash
+git clone https://github.com/Hiromikwl/iOmicsPASSplusRShiny.git
 ```
+
+Install the package from R using `devtools` (run once):
+
+```r
+# Install devtools if you don't have it
+install.packages("devtools")
+
+# Install iOmicsPASS+ from the cloned directory
+devtools::install_local("path/to/iOmicsPASSplusRShiny")
+```
+
+Replace `"path/to/iOmicsPASSplusRShiny"` with the actual path where you cloned the repository.
+
+**Dependencies** installed automatically: `Rcpp`, `BH`, `corpcor`, `gplots`, `grid`, `gridExtra`, `gridGraphics`, `huge`, `nnet`, `pheatmap`, `pracma`, `RColorBrewer`, `shiny`, `bslib`, `DT`, `visNetwork`, `igraph`, `htmlwidgets`.
+
+---
+
+### Launching the Shiny GUI
+
+After installation, launch the interactive GUI from the R console:
+
+```r
+library(iOmicsPASSplus)
+run_iOmicsPASS()
+```
+
+This opens the iOmicsPASS+ web interface in your default browser. The GUI guides you through:
+
+1. **Data upload** — upload up to three omics data files and a network file
+2. **Network inference** *(optional)* — estimate a partial correlation network via `NetDeconvolute()`
+3. **Subnetwork signature analysis** — run iOmicsPASS+ to identify subnetwork signatures discriminating phenotypic groups
+4. **Interactive network visualisation** — explore, filter, and export the resulting network
+5. **Prediction** — classify new samples using the identified signatures
+
+To start the server without opening a browser (e.g. on a remote/headless server):
+
+```r
+run_iOmicsPASS(launch.browser = FALSE)
+```
+
+---
 
 ### Introduction
 
