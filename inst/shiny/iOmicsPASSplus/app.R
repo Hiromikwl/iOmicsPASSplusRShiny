@@ -84,52 +84,110 @@ app_theme <- bs_theme(
   Shiny.addCustomMessageHandler("exportVisNetwork", function(msg) {
     var container = document.getElementById(msg.id);
     if (!container) { console.warn("exportVisNetwork: container not found", msg.id); return; }
+    var SCALE = 3;
 
-    var canvases = Array.prototype.slice.call(container.querySelectorAll("canvas"));
-    canvases = canvases.filter(function(c) { return c.width > 0 && c.height > 0; });
-    if (!canvases.length) { console.warn("exportVisNetwork: no canvases in", msg.id); return; }
+    function doDownload(dUrl) {
+      var link = document.createElement("a");
+      link.href = dUrl; link.download = msg.name + "." + msg.type;
+      document.body.appendChild(link); link.click(); document.body.removeChild(link);
+      if (Shiny && Shiny.setInputValue)
+        Shiny.setInputValue("net_canvas_b64", dUrl, {priority: "event"});
+    }
 
-    // Compute tight bounding box of all canvas elements relative to container
-    var cRect = container.getBoundingClientRect();
-    var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    canvases.forEach(function(c) {
+    // Try to get vis-network + legend instances
+    var network = null, legendNetwork = null;
+    try {
+      var wi = HTMLWidgets.getInstance(container);
+      if (wi) {
+        network       = wi.network || (wi.instance && wi.instance.network) || null;
+        legendNetwork = wi.legend  || (wi.instance && wi.instance.legend)  || null;
+      }
+    } catch(e) {}
+    if (!legendNetwork) {
+      var legEl = document.getElementById("legend" + msg.id);
+      if (legEl) legendNetwork = legEl.network || null;
+    }
+
+    // Snapshot canvas positions BEFORE any setSize distorts getBoundingClientRect
+    var allCvs = Array.prototype.slice.call(container.querySelectorAll("canvas"))
+                      .filter(function(c){ return c.width > 0 && c.height > 0; });
+    if (!allCvs.length) { console.warn("exportVisNetwork: no canvases"); return; }
+    var canvasInfo = allCvs.map(function(c) {
       var r = c.getBoundingClientRect();
-      minX = Math.min(minX, r.left  - cRect.left);
-      minY = Math.min(minY, r.top   - cRect.top);
-      maxX = Math.max(maxX, r.right - cRect.left);
-      maxY = Math.max(maxY, r.bottom - cRect.top);
+      return { canvas: c, origW: r.width, origH: r.height };
     });
-    var outW = Math.ceil(maxX - minX) || container.offsetWidth  || 800;
-    var outH = Math.ceil(maxY - minY) || container.offsetHeight || 600;
+    var mainInfo = canvasInfo.reduce(function(best, ci) {
+      return ci.canvas.width * ci.canvas.height > best.canvas.width * best.canvas.height ? ci : best;
+    }, canvasInfo[0]);
 
-    var dpr = Math.max(window.devicePixelRatio || 1, 2);
-    var out = document.createElement("canvas");
-    out.width  = outW * dpr;
-    out.height = outH * dpr;
-    var ctx = out.getContext("2d");
-    ctx.scale(dpr, dpr);
-    ctx.fillStyle = msg.background || "white";
-    ctx.fillRect(0, 0, outW, outH);
+    if (network && network.setSize) {
+      var origW = container.offsetWidth;
+      var origH = container.offsetHeight;
+      var expW  = origW * SCALE;
+      var expH  = origH * SCALE;
 
-    // Composite every canvas at its position within the bounding box
-    canvases.forEach(function(c) {
-      var r = c.getBoundingClientRect();
-      var x = r.left  - cRect.left - minX;
-      var y = r.top   - cRect.top  - minY;
-      ctx.drawImage(c, x, y, r.width, r.height);
-    });
+      network.setSize(expW + "px", expH + "px");
+      // Also resize the legend vis-network so it re-renders at 3× resolution
+      if (legendNetwork && legendNetwork.setSize) {
+        canvasInfo.forEach(function(ci) {
+          if (ci !== mainInfo)
+            legendNetwork.setSize((ci.origW * SCALE) + "px", (ci.origH * SCALE) + "px");
+        });
+      }
 
-    var mime  = (msg.type === "jpeg") ? "image/jpeg" : "image/png";
-    var dUrl  = out.toDataURL(mime, 0.95);
-    var link  = document.createElement("a");
-    link.href     = dUrl;
-    link.download = msg.name + "." + msg.type;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    // Send PNG data to server so it can be included in ZIP export
-    if (Shiny && Shiny.setInputValue)
-      Shiny.setInputValue("net_canvas_b64", dUrl, {priority: "event"});
+      setTimeout(function() {
+        network.redraw();
+        if (legendNetwork && legendNetwork.redraw) legendNetwork.redraw();
+        setTimeout(function() {
+          var out = document.createElement("canvas");
+          out.width = expW; out.height = expH;
+          var ctx = out.getContext("2d");
+          ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
+          ctx.fillStyle = msg.background || "white"; ctx.fillRect(0, 0, expW, expH);
+          // Main canvas fills the full output
+          ctx.drawImage(mainInfo.canvas, 0, 0, expW, expH);
+          // Legend canvases: pin top-right at 3× their original CSS size
+          canvasInfo.forEach(function(ci) {
+            if (ci === mainInfo) return;
+            var lW = Math.round(ci.origW * SCALE);
+            var lH = Math.round(ci.origH * SCALE);
+            ctx.drawImage(ci.canvas, expW - lW, 0, lW, lH);
+          });
+          var mime = (msg.type === "jpeg") ? "image/jpeg" : "image/png";
+          doDownload(out.toDataURL(mime, 0.95));
+          // Restore both networks to original size
+          network.setSize(origW + "px", origH + "px");
+          if (legendNetwork && legendNetwork.setSize) {
+            canvasInfo.forEach(function(ci) {
+              if (ci !== mainInfo)
+                legendNetwork.setSize(ci.origW + "px", ci.origH + "px");
+            });
+          }
+          setTimeout(function() {
+            network.redraw();
+            if (legendNetwork && legendNetwork.redraw) legendNetwork.redraw();
+          }, 80);
+        }, 350);
+      }, 80);
+    } else {
+      // Fallback: no vis-network instance; capture at 2× DPR scale
+      var dpr  = Math.max(window.devicePixelRatio || 1, 2);
+      var outW = (container.offsetWidth  || 800) * dpr;
+      var outH = (container.offsetHeight || 600) * dpr;
+      var out = document.createElement("canvas");
+      out.width = outW; out.height = outH;
+      var ctx = out.getContext("2d");
+      ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
+      ctx.fillStyle = msg.background || "white"; ctx.fillRect(0, 0, outW, outH);
+      ctx.drawImage(mainInfo.canvas, 0, 0, outW, outH);
+      canvasInfo.forEach(function(ci) {
+        if (ci === mainInfo) return;
+        var lW = Math.round(ci.origW * dpr), lH = Math.round(ci.origH * dpr);
+        ctx.drawImage(ci.canvas, outW - lW, 0, lW, lH);
+      });
+      var mime = (msg.type === "jpeg") ? "image/jpeg" : "image/png";
+      doDownload(out.toDataURL(mime, 0.95));
+    }
   });
 '))
 
@@ -665,7 +723,10 @@ server <- function(input, output, session) {
     net_enrich_result   = NULL,       # R-computed network enrichment (from Run Network Enrichment button)
     gene_enrich_counter = 0L,         # incremented by Run Pathway Enrichment button
     bg_custom           = NULL,       # custom background gene list uploaded by user
-    net_export_path     = NULL        # temp PNG written each time user saves network
+    net_export_path     = NULL,       # temp PNG written each time user saves network
+    net_layout          = NULL,       # cached igraph layout matrix
+    net_layout_key      = NULL,       # node-set hash used to detect layout invalidation
+    net_layout_nodes    = NULL        # node order matching net_layout rows
   )
 
   # ── Load Example Data ──────────────────────────────────────────────────────
@@ -1730,8 +1791,7 @@ server <- function(input, output, session) {
       return()
     }
 
-    rv$result            <- NULL
-    rv$net_enrich_result <- NULL   # clear stale enrichment when re-running analysis
+    # Keep old result visible during analysis (avoids double re-render cycle)
     rv$analysis_log      <- "Preparing inputs...\n"
 
     withProgress(message = "Running iOmicsPASS analysis...", value = 0L, {
@@ -1797,6 +1857,7 @@ server <- function(input, output, session) {
             use.rcpp       = TRUE
           )
           rv$result <- res
+          rv$net_enrich_result <- NULL   # clear stale enrichment alongside new result
         }, message = function(m) {
           log_msgs <<- c(log_msgs, conditionMessage(m))
           invokeRestart("muffleMessage")
@@ -2951,6 +3012,9 @@ server <- function(input, output, session) {
   # ── Interactive network (visNetwork) — auto-renders after analysis; button freezes to a chosen threshold ─────────
   output$interactive_net <- visNetwork::renderVisNetwork({
     req(rv$result, rv$result$EdgesSelected)
+    # Wait for net_group_select_ui to finish rendering so all downstream inputs
+    # are ready — prevents 3-4 rapid re-renders from input null-transitions
+    req(!is.null(input$net_group_color))
     fe <- if (isTRUE(input$apply_threshold > 0)) filtered_edges_applied() else filtered_edges()
     group_sel   <- input$net_group_color  # reactive dep: re-renders on group change
     if (is.null(fe) || nrow(fe) == 0) return(NULL)
@@ -2989,20 +3053,34 @@ server <- function(input, output, session) {
     node_font_size <- if (deg_range[1L] == deg_range[2L]) rep(40L, length(node_deg)) else
       28L + as.integer(52L * (node_deg - deg_range[1L]) / (deg_range[2L] - deg_range[1L]))
 
-    # Pre-compute layout in R via igraph (avoids vis.js physics hang)
-    g_tmp    <- igraph::graph_from_data_frame(
-      data.frame(from = fe$NodeA, to = fe$NodeB, stringsAsFactors = FALSE),
-      directed = FALSE,
-      vertices = data.frame(name = all_nodes, stringsAsFactors = FALSE)
-    )
-    lo       <- igraph::layout_with_fr(g_tmp, niter = 300)
-    lo_scale <- 200
+    # Layout: reuse cached layout if the node set hasn't changed (preserves
+    # positions when only edge colors/style change), else recompute.
+    layout_key <- paste(sort(all_nodes), collapse = "\x1f")
+    cached_lo    <- isolate(rv$net_layout)
+    cached_key   <- isolate(rv$net_layout_key)
+    cached_nodes <- isolate(rv$net_layout_nodes)
+    if (!is.null(cached_lo) && identical(cached_key, layout_key) && !is.null(cached_nodes)) {
+      node_idx <- match(all_nodes, cached_nodes)
+      lo <- cached_lo[node_idx, , drop = FALSE]
+    } else {
+      g_tmp <- igraph::graph_from_data_frame(
+        data.frame(from = fe$NodeA, to = fe$NodeB, stringsAsFactors = FALSE),
+        directed = FALSE,
+        vertices = data.frame(name = all_nodes, stringsAsFactors = FALSE)
+      )
+      lo <- igraph::layout_with_fr(g_tmp, niter = 300) * 200L
+      isolate({
+        rv$net_layout       <- lo
+        rv$net_layout_key   <- layout_key
+        rv$net_layout_nodes <- all_nodes
+      })
+    }
     nodes_df <- data.frame(
       id        = all_nodes, label = node_label, group = data_type,
       color     = node_color, size  = node_size,
       font.size = node_font_size,
-      x         = lo[, 1] * lo_scale,
-      y         = lo[, 2] * lo_scale,
+      x         = lo[, 1],
+      y         = lo[, 2],
       title     = paste0(node_label, " (", data_type, ") | degree: ", node_deg),
       stringsAsFactors = FALSE
     )
@@ -3113,9 +3191,37 @@ server <- function(input, output, session) {
                                       list(enabled = FALSE)
                                     else
                                       list(type = input$edge_smooth_type %||% "continuous")) %>%
-      visNetwork::visInteraction(navigationButtons = TRUE)
+      visNetwork::visInteraction(navigationButtons = TRUE) %>%
+      visNetwork::visEvents(
+        dragEnd = htmlwidgets::JS(
+          "function(params) {
+             if (params.nodes && params.nodes.length > 0 && window.Shiny) {
+               Shiny.setInputValue('interactive_net_positions',
+                 this.getPositions(), {priority: 'event'});
+             }
+           }"
+        )
+      )
     net
   })
+
+  # Capture user-moved node positions → update layout cache
+  observeEvent(input$interactive_net_positions, {
+    pos <- input$interactive_net_positions
+    if (is.null(pos) || length(pos) == 0L || is.null(rv$net_layout_nodes)) return()
+    nodes  <- rv$net_layout_nodes
+    lo_new <- matrix(0, nrow = length(nodes), ncol = 2L)
+    for (i in seq_along(nodes)) {
+      nd_pos <- pos[[as.character(nodes[i])]]
+      if (!is.null(nd_pos)) {
+        lo_new[i, 1L] <- if (!is.null(nd_pos$x)) as.numeric(nd_pos$x) else 0
+        lo_new[i, 2L] <- if (!is.null(nd_pos$y)) as.numeric(nd_pos$y) else 0
+      } else if (!is.null(rv$net_layout) && i <= nrow(rv$net_layout)) {
+        lo_new[i, ] <- rv$net_layout[i, ]
+      }
+    }
+    rv$net_layout <- lo_new
+  }, ignoreNULL = TRUE, ignoreInit = TRUE)
 
   # ── Network hub table ──────────────────────────────────────────────────────
   output$net_hub_tbl <- DT::renderDT({
