@@ -1,5 +1,5 @@
 # iOmicsPASS+
-## Integrative -Omics Predictive Analysis of Subnetwork Signatures (Version II - *An R-package*)
+## Integrative -Omics Predictive Analysis of Subnetwork Signatures (R Shiny GUI)
 
 ### System Requirements
 
@@ -80,7 +80,7 @@ All R dependencies install automatically. First install takes a few minutes.
 
 ### Launching the Application
 
-Each time you want to use iOmicsPASS+, open RStudio and run:
+Each time you want to use iOmicsPASS+ R Shiny, open RStudio and run:
 
 ```r
 library(iOmicsPASSplus)
