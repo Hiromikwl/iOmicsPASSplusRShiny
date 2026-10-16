@@ -58,7 +58,7 @@ Open Terminal and run:
 ```bash
 xcode-select --install
 ```
-A dialog box will appear — click Install. This takes approximately 5–10 minutes and requires an internet connection.
+A dialog box will appear — click Install. This takes approximately 5–10 minutes and requires an internet connection. If you already gave Xcode IDE/Xcode CLT installed, you may skip this step.
 
 **Step 4 — Verify the compiler is detected**  
 In the RStudio Console:
