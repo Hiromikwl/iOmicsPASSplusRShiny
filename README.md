@@ -36,7 +36,7 @@ The output should print `TRUE`. If you see `FALSE`, restart RStudio and try agai
 **Step 5 — Install iOmicsPASS+ from GitHub**  
 In the RStudio Console:
 ```r
-install.packages("remotes")
+if (!requireNamespace("remotes", quietly = TRUE)) install.packages("remotes")
 remotes::install_github("Hiromikwl/iOmicsPASSplusRShiny")
 ```
 All R package dependencies install automatically. The first install takes a few minutes.
@@ -71,7 +71,7 @@ Should print `TRUE`. If `FALSE`, restart RStudio after the Xcode CLT installatio
 **Step 5 — Install iOmicsPASS+ from GitHub**  
 In the RStudio Console:
 ```r
-install.packages("remotes")
+if (!requireNamespace("remotes", quietly = TRUE)) install.packages("remotes")
 remotes::install_github("Hiromikwl/iOmicsPASSplusRShiny")
 ```
 All R dependencies install automatically. First install takes a few minutes.
