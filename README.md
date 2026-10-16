@@ -28,6 +28,7 @@ iOmicsPASS+ contains compiled C++ code. Download Rtools from https://cran.r-proj
 **Step 4 — Verify the compiler is detected**  
 In the RStudio Console:
 ```r
+if (!requireNamespace("pkgbuild", quietly = TRUE)) install.packages("pkgbuild")
 pkgbuild::has_build_tools(debug = TRUE)
 ```
 The output should print `TRUE`. If you see `FALSE`, restart RStudio and try again.
@@ -62,6 +63,7 @@ A dialog box will appear — click Install. This takes approximately 5–10 minu
 **Step 4 — Verify the compiler is detected**  
 In the RStudio Console:
 ```r
+if (!requireNamespace("pkgbuild", quietly = TRUE)) install.packages("pkgbuild")
 pkgbuild::has_build_tools(debug = TRUE)
 ```
 Should print `TRUE`. If `FALSE`, restart RStudio after the Xcode CLT installation completes.
