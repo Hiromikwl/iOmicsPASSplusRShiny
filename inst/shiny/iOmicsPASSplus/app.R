@@ -3331,11 +3331,13 @@ server <- function(input, output, session) {
       writeLines(summary_lines, file.path(zip_dir, "summary.txt"))
 
       # Pull any extra files written to tmpDir by the Rcpp core.
-      # Skip Ztransform_data*.txt — already included as ZtransX/Y/Z.txt above.
+      # Skip Ztransform_data*.txt (already included as ZtransX/Y/Z.txt above)
+      # and SampleClass_Probabilities.txt (already included as SampleProbabilities.txt above).
       if (!is.null(res$tmpDir) && dir.exists(res$tmpDir)) {
         extra <- list.files(res$tmpDir, full.names = TRUE, recursive = FALSE)
         for (f in extra) {
           if (grepl("^Ztransform_data", basename(f))) next
+          if (basename(f) == "SampleClass_Probabilities.txt") next
           dest <- file.path(zip_dir, basename(f))
           if (!file.exists(dest)) file.copy(f, dest)
         }
